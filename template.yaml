@@ -1,72 +1,62 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  media-processor
+Description: S3 to DynamoDB Logger (Simple Version)
 
-  Sample SAM Template for media-processor
-
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
-Globals:
-  Function:
-    Timeout: 3
-
-    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
-    LoggingConfig:
-      LogFormat: JSON
 Resources:
-  # 1. The S3 Bucket where you will upload images
-  SourceImageBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${AWS::StackName}-uploads-${AWS::AccountId}"
-
-  # 2. The DynamoDB Table (Fixed typo: Serveless -> Serverless)
+  # 1. DynamoDB Table to store image metadata
   ImageMetadataTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
       PrimaryKey:
         Name: id
         Type: String
-        
+
+  # 2. S3 Bucket for image uploads
+  UploadBucket:
+    Type: AWS::S3::Bucket
+
   # 3. The Lambda Function
   ImageProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: hello-world/ 
+      CodeUri: image-logger/
       Handler: app.lambdaHandler
       Runtime: nodejs20.x
       Architectures:
-        - x86_64
-      MemorySize: 512
+        - arm64
+      MemorySize: 256
+      Timeout: 20
       Environment:
-        Variables: # Fixed: capitalized 'V'
+        Variables:
           TABLE_NAME: !Ref ImageMetadataTable
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Sub "${AWS::StackName}-uploads-${AWS::AccountId}"
-        - DynamoDBCrudPolicy: # Added this so your code can actually write to the DB
+        # Grants CRUD permissions specifically to our new table
+        - DynamoDBCrudPolicy:
             TableName: !Ref ImageMetadataTable
       Events:
-        FileUploadEvent:
+        # Trigger on ANY file creation in the bucket
+        NewFileEvent:
           Type: S3
           Properties:
-            Bucket: !Ref SourceImageBucket
+            Bucket: !Ref UploadBucket
             Events: s3:ObjectCreated:*
+
     Metadata:
+      # Tells SAM how to compile your TypeScript app.ts
       BuildMethod: esbuild
       BuildProperties:
         Minify: true
         Target: "es2020"
-        Sourcemap: true
-        EntryPoints: 
-        - app.ts
+        Format: "esm"
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - app.ts
+
 Outputs:
-  ImageProcessorFunction:
-    Description: "Image Processor Lambda Function ARN"
-    Value: !GetAtt ImageProcessorFunction.Arn
-  ImageProcessorFunctionIamRole:
-    Description: "Implicit IAM Role created for Image Processor function"
-    Value: !GetAtt ImageProcessorFunctionRole.Arn
-  SourceImageBucketName:
-    Description: "S3 Bucket Name"
-    Value: !Ref SourceImageBucket
+  BucketName:
+    Description: "Upload images here"
+    Value: !Ref UploadBucket
+  TableName:
+    Description: "Metadata will appear here"
+    Value: !Ref ImageMetadataTable
