@@ -1,5 +1,7 @@
 # Media Processor: Powered by AWS Serverless
 
+### V1: Logs the image keys into DynamoDB
+
 A serverless application that automatically logs metadata of any file uploaded to an S3 bucket into a DynamoDB table. Built with AWS SAM, TypeScript, and Node.js 20.
 
 ## Architecture
