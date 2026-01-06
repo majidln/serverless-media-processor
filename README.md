@@ -1,18 +1,19 @@
-# Media Processor: Powered by AWS Serverless
+# Media Processor: AI-Powered Image Tagger
 
-### V1: Logs the image keys into DynamoDB
+### V2: Serverless Image Analysis with Amazon Rekognition
 
-A serverless application that automatically logs metadata of any file uploaded to an S3 bucket into a DynamoDB table. Built with AWS SAM, TypeScript, and Node.js 20.
+This serverless application automatically analyzes images uploaded to S3 using AI. It detects objects (labels), calculates confidence scores, and logs the metadata into a DynamoDB table. Built with **AWS SAM**, **TypeScript**, and **Node.js**.
 
 ## Architecture
 
-![Architecture Diagram](images/Media-Processor-V1.jpg)
+![Architecture Diagram](images/Media-Processor-V2.jpg)
 
 The application follows a simple serverless architecture:
 
-1. **Amazon S3** - Stores uploaded files and triggers the Lambda function on file creation
-2. **AWS Lambda** - Processes S3 events and extracts file metadata
-3. **Amazon DynamoDB** - Stores the file metadata (filename, bucket, size, timestamp)
+1. **Amazon S3**: Acts as the landing zone for images. Uploading a file triggers the Lambda.
+2. **AWS Lambda**: Orchestrates the process—fetching metadata and calling AI services.
+3. **Amazon Rekognition**: Deep learning service that identifies objects (e.g., "Dog", "Car", "Nature").
+4. **Amazon DynamoDB**: Stores the final results, including filename and AI-generated tags.
 
 ## Project Structure
 
