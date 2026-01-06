@@ -1,9 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: S3 to DynamoDB Logger (Simple Version)
+Description: S3 to DynamoDB Logger - Fixed Circular Dependency
 
 Resources:
-  # 1. DynamoDB Table to store image metadata
   ImageMetadataTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
@@ -11,11 +10,11 @@ Resources:
         Name: id
         Type: String
 
-  # 2. S3 Bucket for image uploads
   UploadBucket:
     Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-upload-bucket"
 
-  # 3. The Lambda Function
   ImageProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -25,16 +24,17 @@ Resources:
       Architectures:
         - arm64
       MemorySize: 256
-      Timeout: 20
+      Timeout: 30
       Environment:
         Variables:
           TABLE_NAME: !Ref ImageMetadataTable
       Policies:
-        # Grants CRUD permissions specifically to our new table
         - DynamoDBCrudPolicy:
             TableName: !Ref ImageMetadataTable
+        - RekognitionDetectOnlyPolicy: {}
+        - S3ReadPolicy:
+            BucketName: !Sub "${AWS::StackName}-upload-bucket"
       Events:
-        # Trigger on ANY file creation in the bucket
         NewFileEvent:
           Type: S3
           Properties:
@@ -42,19 +42,16 @@ Resources:
             Events: s3:ObjectCreated:*
 
     Metadata:
-      # Tells SAM how to compile your TypeScript app.ts
       BuildMethod: esbuild
       BuildProperties:
         Minify: true
         Target: "es2020"
-        Format: "cjs"
+        Format: "cjs" # Your current format
         EntryPoints:
           - app.ts
 
 Outputs:
   BucketName:
-    Description: "Upload images here"
     Value: !Ref UploadBucket
   TableName:
-    Description: "Metadata will appear here"
     Value: !Ref ImageMetadataTable

@@ -1,10 +1,12 @@
 import { S3Event } from 'aws-lambda';
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { RekognitionClient, DetectLabelsCommand } from "@aws-sdk/client-rekognition";
 
 // Initialize DynamoDB Client
 const ddbClient = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
+const rekogClient = new RekognitionClient({});
 const tableName = process.env.TABLE_NAME;
 
 export const lambdaHandler = async (event: S3Event): Promise<void> => {
@@ -20,6 +22,18 @@ export const lambdaHandler = async (event: S3Event): Promise<void> => {
 
             console.log(`NEW FILE DETECTED: [${fileKey}] in bucket [${bucketName}]`);
 
+            // 1. AI Analysis
+            const detectParams = new DetectLabelsCommand({
+                Image: { S3Object: { Bucket: bucketName, Name: fileKey } },
+                MaxLabels: 5,
+                MinConfidence: 70,
+            });
+
+            const rekogResponse = await rekogClient.send(detectParams);
+            const labels = rekogResponse.Labels?.map(label => label.Name) || [];
+
+            console.log(`LABELS DETECTED: ${labels}`);
+
             // Save metadata to DynamoDB
             const putParams = {
                 TableName: tableName,
@@ -28,6 +42,7 @@ export const lambdaHandler = async (event: S3Event): Promise<void> => {
                     bucket: bucketName,
                     size: fileSize,
                     timestamp: eventTime,
+                    labels: labels,
                     status: "PROCESSED_BY_LAMBDA"
                 }
             };
