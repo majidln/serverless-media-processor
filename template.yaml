@@ -47,9 +47,7 @@ Resources:
       BuildProperties:
         Minify: true
         Target: "es2020"
-        Format: "esm"
-        OutExtension:
-          - .js=.mjs
+        Format: "cjs"
         EntryPoints:
           - app.ts
 
