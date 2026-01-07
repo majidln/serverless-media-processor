@@ -1,13 +1,14 @@
 import { S3Event } from 'aws-lambda';
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { RekognitionClient, DetectLabelsCommand } from "@aws-sdk/client-rekognition";
+import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 
-// Initialize DynamoDB Client
 const ddbClient = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
-const rekogClient = new RekognitionClient({});
+const snsClient = new SNSClient({});
+
 const tableName = process.env.TABLE_NAME;
+const topicArn = process.env.TOPIC_ARN;
 
 export const lambdaHandler = async (event: S3Event): Promise<void> => {
     // This log helps you see the raw data coming from S3
@@ -22,38 +23,43 @@ export const lambdaHandler = async (event: S3Event): Promise<void> => {
 
             console.log(`NEW FILE DETECTED: [${fileKey}] in bucket [${bucketName}]`);
 
-            // 1. AI Analysis
-            const detectParams = new DetectLabelsCommand({
-                Image: { S3Object: { Bucket: bucketName, Name: fileKey } },
-                MaxLabels: 5,
-                MinConfidence: 70,
-            });
-
-            const rekogResponse = await rekogClient.send(detectParams);
-            const labels = rekogResponse.Labels?.map(label => label.Name) || [];
-
-            console.log(`LABELS DETECTED: ${labels}`);
-
             // Save metadata to DynamoDB
             const putParams = {
                 TableName: tableName,
                 Item: {
-                    id: fileKey, // The file path is our unique ID
+                    id: fileKey,
                     bucket: bucketName,
                     size: fileSize,
                     timestamp: eventTime,
-                    labels: labels,
-                    status: "PROCESSED_BY_LAMBDA"
+                    status: "INITIALIZED",
+                    createdAt: new Date().toISOString()
                 }
             };
 
             await ddbDocClient.send(new PutCommand(putParams));
-            
-            console.log(`SUCCESS: Metadata for ${fileKey} saved to table ${tableName}`);
+
+            console.log(`Metadata for ${fileKey} saved to table ${tableName}`);
+
+            const messagePayload = {
+                bucket: bucketName,
+                key: fileKey
+            }
+
+            await snsClient.send(new PublishCommand({
+                TopicArn: topicArn,
+                Message: JSON.stringify(messagePayload),
+                MessageAttributes: {
+                    eventType: {
+                        DataType: 'String',
+                        StringValue: 'ObjectCreated'
+                    }
+                }
+            }))
+
+            console.log(`NS Notification sent for ${fileKey}`);
 
         } catch (error) {
             console.error("ERROR PROCESSING RECORD:", error);
-            // Re-throw if you want S3 to retry, or handle silently
         }
     }
 };

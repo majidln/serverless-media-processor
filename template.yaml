@@ -49,6 +49,25 @@ Resources:
         EntryPoints:
           - get-url.ts
 
+  ImageEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ImageUploadEvents
+
+  ImageEventsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ImageEventsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref ImageEventsTopic
+
   ImageProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -62,12 +81,14 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ImageMetadataTable
+          TOPIC_ARN: !Ref ImageEventsTopic
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ImageMetadataTable
-        - RekognitionDetectOnlyPolicy: {}
         - S3ReadPolicy:
             BucketName: !Sub "${AWS::StackName}-upload-bucket"
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt ImageEventsTopic.TopicName
       Events:
         NewFileEvent:
           Type: S3
@@ -83,6 +104,39 @@ Resources:
         Format: "cjs" # Your current format
         EntryPoints:
           - app.ts
+
+  ImageAnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: image-logger/
+      Handler: image-analyzer.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ImageMetadataTable
+      Events:
+        TopicEvent:
+          Type: SNS
+          Properties:
+            Topic: !Ref ImageEventsTopic
+      Policies:
+        - RekognitionDetectOnlyPolicy: {}
+        - S3ReadPolicy:
+            BucketName: !Ref UploadBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageMetadataTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Format: "cjs"
+        EntryPoints:
+          - image-analyzer.ts
 
 Outputs:
   ApiUrl:
