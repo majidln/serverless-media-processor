@@ -1,29 +1,30 @@
 # Media Processor: AI-Powered Image Tagger
 
-### V3: API-Driven Image Uploads & AI Analysis
+### V4: Event-Driven Image Uploads & AI Analysis
 
-This serverless application automatically analyzes images uploaded to S3 using AI. It provides a secure endpoint to request **S3 Presigned URLs**, enabling clients to upload images directly to S3 without exposing AWS credentials. Once the upload is complete, the system automatically triggers AI analysis and logs the results.
+Version 4 introduces an asynchronous Fan-out architecture. Instead of one Lambda doing all the work, a "Dispatcher" Lambda notifies an SNS Topic, which then triggers multiple specialized workers (starting with our AI Analyzer). This makes the system more modular, resilient, and ready for parallel tasks.
 
 ## Architecture
 
-![Architecture Diagram](images/Media-Processor-V3.jpg)
+![Architecture Diagram](images/Media-Processor-V4.jpg)
 
 The application follows a simple serverless architecture:
 
-1.  **API Gateway (HTTP API)**: A modern, high-performance API endpoint that accepts `POST` requests.
-2.  **Lambda (URL Generator)**: Generates a temporary, secure **S3 Presigned URL**.
-3.  **Amazon S3**: Receives binary image data directly from the client.
-4.  **Lambda (Image Processor)**: Triggered by the S3 `ObjectCreated` event to orchestrate analysis.
-5.  **Amazon Rekognition**: Deep learning AI that identifies labels (e.g., "Forest", "Mountain", "Vehicle").
-6.  **Amazon DynamoDB**: Stores image metadata, timestamps, and AI-generated tags.
+1.  **API Gateway (HTTP API)**: A high-performance endpoint for requesting **S3 Presigned URLs**.
+2.  **S3 Bucket**: Receives the binary image data from the client.
+3.  **Dispatcher Lambda**: Triggered by S3 `ObjectCreated`. It writes an initial "PENDING" record to DynamoDB and publishes a message to the **SNS Topic**.
+4.  **Amazon SNS (Image Events Topic)**: Acts as the message hub, broadcasting the image location to all "listeners."
+5.  **AI Analyzer Lambda**: An SNS subscriber that receives the message, calls **Amazon Rekognition** for labels, and updates the DynamoDB record.
+6.  **Amazon DynamoDB**: The source of truth for metadata, storing everything from file size to AI-generated tags.
 
 ## Project Structure
 
 ```
 .
 ├── image-logger/           # Lambda function source code
-│   ├── app.ts              # Main logic
-│   ├── get.url.ts          # Get url for upload to S3 
+│   ├── app.ts              # Initial DB log & SNS Broadcast
+│   ├── get-url.ts          # Get url for upload to S3 
+│   ├── image-analzer.ts    # SNS Subsciber for AI Analysis
 │   └── package.json        # Dependencies (AWS SDK v3)
 ├── events/                 # Mock events for local testing
 │   └── s3-event.json       # Generated S3 Put event
@@ -37,6 +38,11 @@ The application follows a simple serverless architecture:
 - SAM CLI installed.
 - Docker installed (for local testing).
 - Node.js 20.x and esbuild installed globally (`npm install -g esbuild`).
+
+## Upcoming features
+
+- New AWS lambda for resize the image (using jimp)
+- AI safety check lambda to check if the image is safe for work (NSFW)
 
 ## Getting Started
 
