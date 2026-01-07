@@ -1,19 +1,21 @@
 # Media Processor: AI-Powered Image Tagger
 
-### V2: Serverless Image Analysis with Amazon Rekognition
+### V3: API-Driven Image Uploads & AI Analysis
 
-This serverless application automatically analyzes images uploaded to S3 using AI. It detects objects (labels), calculates confidence scores, and logs the metadata into a DynamoDB table. Built with **AWS SAM**, **TypeScript**, and **Node.js**.
+This serverless application automatically analyzes images uploaded to S3 using AI. It provides a secure endpoint to request **S3 Presigned URLs**, enabling clients to upload images directly to S3 without exposing AWS credentials. Once the upload is complete, the system automatically triggers AI analysis and logs the results.
 
 ## Architecture
 
-![Architecture Diagram](images/Media-Processor-V2.jpg)
+![Architecture Diagram](images/Media-Processor-V3.jpg)
 
 The application follows a simple serverless architecture:
 
-1. **Amazon S3**: Acts as the landing zone for images. Uploading a file triggers the Lambda.
-2. **AWS Lambda**: Orchestrates the process—fetching metadata and calling AI services.
-3. **Amazon Rekognition**: Deep learning service that identifies objects (e.g., "Dog", "Car", "Nature").
-4. **Amazon DynamoDB**: Stores the final results, including filename and AI-generated tags.
+1.  **API Gateway (HTTP API)**: A modern, high-performance API endpoint that accepts `POST` requests.
+2.  **Lambda (URL Generator)**: Generates a temporary, secure **S3 Presigned URL**.
+3.  **Amazon S3**: Receives binary image data directly from the client.
+4.  **Lambda (Image Processor)**: Triggered by the S3 `ObjectCreated` event to orchestrate analysis.
+5.  **Amazon Rekognition**: Deep learning AI that identifies labels (e.g., "Forest", "Mountain", "Vehicle").
+6.  **Amazon DynamoDB**: Stores image metadata, timestamps, and AI-generated tags.
 
 ## Project Structure
 
@@ -21,6 +23,7 @@ The application follows a simple serverless architecture:
 .
 ├── image-logger/           # Lambda function source code
 │   ├── app.ts              # Main logic
+│   ├── get.url.ts          # Get url for upload to S3 
 │   └── package.json        # Dependencies (AWS SDK v3)
 ├── events/                 # Mock events for local testing
 │   └── s3-event.json       # Generated S3 Put event
