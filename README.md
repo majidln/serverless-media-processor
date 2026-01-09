@@ -1,21 +1,25 @@
 # Media Processor: AI-Powered Image Tagger
 
-### V4: Event-Driven Image Uploads & AI Analysis
+### V5: Secure Event-Driven Image Uploads & AI Analysis
 
-Version 4 introduces an asynchronous Fan-out architecture. Instead of one Lambda doing all the work, a "Dispatcher" Lambda notifies an SNS Topic, which then triggers multiple specialized workers (starting with our AI Analyzer). This makes the system more modular, resilient, and ready for parallel tasks.
+Version 5 introduces Amazon Cognito authentication to secure all API access.
+Only authenticated users can request S3 presigned URLs and upload images.
+
+The system also continues using the event-driven fan-out architecture introduced in V4: instead of a single Lambda doing all the work, uploads trigger a Dispatcher Lambda that publishes to SNS, allowing multiple processing pipelines (AI analysis, future resizing, safety checks, etc.) to run in parallel.
 
 ## Architecture
 
-![Architecture Diagram](images/Media-Processor-V4.jpg)
+![Architecture Diagram](images/Media-Processor-V5.jpg)
 
 The application follows a simple serverless architecture:
 
-1.  **API Gateway (HTTP API)**: A high-performance endpoint for requesting **S3 Presigned URLs**.
-2.  **S3 Bucket**: Receives the binary image data from the client.
-3.  **Dispatcher Lambda**: Triggered by S3 `ObjectCreated`. It writes an initial "PENDING" record to DynamoDB and publishes a message to the **SNS Topic**.
-4.  **Amazon SNS (Image Events Topic)**: Acts as the message hub, broadcasting the image location to all "listeners."
-5.  **AI Analyzer Lambda**: An SNS subscriber that receives the message, calls **Amazon Rekognition** for labels, and updates the DynamoDB record.
-6.  **Amazon DynamoDB**: The source of truth for metadata, storing everything from file size to AI-generated tags.
+1.  **Amazon Cognito (User Pool + App Client)**: Handles user authentication and issues JWT access tokens..
+2.  **API Gateway (HTTP API)**: A high-performance endpoint for requesting **S3 Presigned URLs**.
+3.  **S3 Bucket**: Receives the binary image data from the client.
+4.  **Dispatcher Lambda**: Triggered by S3 `ObjectCreated`. It writes an initial "PENDING" record to DynamoDB and publishes a message to the **SNS Topic**.
+5.  **Amazon SNS (Image Events Topic)**: Acts as the message hub, broadcasting the image location to all "listeners."
+6.  **AI Analyzer Lambda**: An SNS subscriber that receives the message, calls **Amazon Rekognition** for labels, and updates the DynamoDB record.
+7.  **Amazon DynamoDB**: The source of truth for metadata, storing everything from file size to AI-generated tags.
 
 ## Project Structure
 
