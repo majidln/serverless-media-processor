@@ -1,8 +1,60 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: S3 to DynamoDB Logger - Fixed Circular Dependency
+Description: Media Processor - AI-Powered Image Tagger
 
 Resources:
+
+  AuthCognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-user-pool"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: false
+
+  AuthCognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref AuthCognitoUserPool
+      ClientName: !Sub "${AWS::StackName}-user-pool-client"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  MediaProcessorApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub "${AWS::StackName}-image-api"
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - POST
+          - GET
+          - OPTIONS 
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        MaxAge: 3000
+      Auth:
+        Authorizers:
+          MyCognitoAuthorizer:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${AuthCognitoUserPool}"
+              Audience:
+                - !Ref AuthCognitoUserPoolClient
+        DefaultAuthorizer: MyCognitoAuthorizer
+
   ImageMetadataTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
@@ -20,7 +72,7 @@ Resources:
             AllowedMethods: [GET, PUT, POST, HEAD]
             AllowedOrigins: ['*']
             MaxAge: 3000
-  # Generate Presigned URL for the bucket
+
   GetUploadUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -38,6 +90,7 @@ Resources:
         UploadApi:
           Type: HttpApi
           Properties:
+            ApiId: !Ref MediaProcessorApi
             Path: /upload
             Method: post
     Metadata:
@@ -95,13 +148,12 @@ Resources:
           Properties:
             Bucket: !Ref UploadBucket
             Events: s3:ObjectCreated:*
-
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         Minify: true
         Target: "es2020"
-        Format: "cjs" # Your current format
+        Format: "cjs"
         EntryPoints:
           - app.ts
 
@@ -140,10 +192,20 @@ Resources:
 
 Outputs:
   ApiUrl:
-    Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Description: "API Gateway HTTP API endpoint URL"
+    Value: !Sub "https://${MediaProcessorApi}.execute-api.${AWS::Region}.amazonaws.com"
   BucketName:
     Description: "Upload bucket name"
     Value: !Ref UploadBucket
   TableName:
+    Description: "DynamoDB table name"
     Value: !Ref ImageMetadataTable
+  UserPoolId:
+    Description: "Cognito User Pool ID for authentication"
+    Value: !Ref AuthCognitoUserPool
+  UserPoolClientId:
+    Description: "Cognito User Pool App Client ID"
+    Value: !Ref AuthCognitoUserPoolClient
+  UserPoolIssuerUrl:
+    Description: "Cognito User Pool Issuer URL for JWT validation"
+    Value: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${AuthCognitoUserPool}"
